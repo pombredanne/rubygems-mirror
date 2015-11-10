@@ -67,11 +67,13 @@ class Gem::Mirror
       Dir.mkdir gemdir = File.join(@source_path, 'gems')
 
       @source_working = working = Dir.mktmpdir("test_gem_source_#{$$}")
+      FileUtils.mkdir_p rzspecdir = File.join(@source_path, "quick/Marshal.#{Gem.marshal_version}")
 
       Dir.mkdir File.join(working, 'lib')
 
       gemspecs = %w[a b c].map do |name|
         FileUtils.touch File.join(working, 'lib', "#{name}.rb")
+        FileUtils.touch File.join(rzspecdir, "#{name}spec.rz")
         Gem::Specification.new do |s|
           s.platform = Gem::Platform::RUBY
           s.name = name
@@ -88,13 +90,35 @@ class Gem::Mirror
         end
       end
 
+      # add prerelease gem versions
+      prerelease_gemspecs = %w[x y].map do |name|
+        FileUtils.touch File.join(working, 'lib', "#{name}.rb")
+        FileUtils.touch File.join(rzspecdir, "#{name}spec.rz")
+        Gem::Specification.new do |s|
+          s.platform = Gem::Platform::RUBY
+          s.name = name
+          s.version = "0.1.b"
+          s.author = 'rubygems'
+          s.email = 'example@example.com'
+          s.homepage = 'http://example.com'
+          s.has_rdoc = false
+          s.description = 'desc'
+          s.summary = "summ"
+          s.require_paths = %w[lib]
+          s.files = %W[lib/#{name}.rb]
+          s.rubyforge_project = 'rubygems'
+        end
+      end
+
+      gemspecs.concat(prerelease_gemspecs)
+
       gemspecs.each do |spec|
         path = File.join(working, "#{spec.name}.gemspec")
         open(path, 'w') do |io|
           io.write(spec.to_ruby)
         end
         Dir.chdir(working) do
-          gem_file = Gem::Builder.new(spec).build
+          gem_file = Gem::Package.build(spec)
           FileUtils.mv(gem_file, File.join(@source_path, 'gems', gem_file))
         end
       end
@@ -149,7 +173,7 @@ class Gem::Mirror
       @server && @server.shutdown
       @server_thread && @server_thread.join
     end
-    
+
     def with_server
       setup_ui
       setup_gem_source
